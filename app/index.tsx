@@ -1,65 +1,119 @@
-import { View, Text, StyleSheet, Pressable } from 'react-native';
+import { View, Text, Pressable, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
-import { useTranscription } from '../hooks/useTranscription';
-import { RecordButton } from '../components/RecordButton';
-import { TranscriptView } from '../components/TranscriptView';
+import { Ionicons } from '@expo/vector-icons';
+import Animated, {
+  FadeIn,
+  FadeOut,
+  useAnimatedStyle,
+  withTiming,
+  useSharedValue,
+  interpolateColor,
+} from 'react-native-reanimated';
+import { useEffect } from 'react';
+
+import { MicButton } from '../components/MicButton';
+import { ClaimsList } from '../components/ClaimsList';
+import { useFactChecker } from '../hooks/useFactChecker';
+import { useTheme, useColors, lightColors, darkColors } from '../theme';
+
+const AnimatedView = Animated.View;
+const AnimatedSafeAreaView = Animated.createAnimatedComponent(SafeAreaView);
 
 export default function Index() {
-  const {
-    status,
-    transcript,
-    error,
-    startRecording,
-    stopRecording,
-    clearTranscript,
-  } = useTranscription();
+  const { status, claims, toggleListening, clearClaims } = useFactChecker();
+  const { isDark, toggleTheme } = useTheme();
+  const { colors } = useColors();
 
-  const handleRecordPress = () => {
-    if (status === 'recording') {
-      stopRecording();
-    } else if (status === 'idle') {
-      startRecording();
-    }
-  };
+  const isListening = status === 'listening';
+
+  // Animated theme transition
+  const themeProgress = useSharedValue(isDark ? 1 : 0);
+
+  useEffect(() => {
+    themeProgress.value = withTiming(isDark ? 1 : 0, { duration: 300 });
+  }, [isDark]);
+
+  const containerStyle = useAnimatedStyle(() => ({
+    backgroundColor: interpolateColor(
+      themeProgress.value,
+      [0, 1],
+      [lightColors.surface, darkColors.surface]
+    ),
+  }));
+
+  const headerStyle = useAnimatedStyle(() => ({
+    backgroundColor: interpolateColor(
+      themeProgress.value,
+      [0, 1],
+      [lightColors.surface, darkColors.surface]
+    ),
+  }));
+
+  const titleStyle = useAnimatedStyle(() => ({
+    color: interpolateColor(
+      themeProgress.value,
+      [0, 1],
+      [lightColors.textPrimary, darkColors.textPrimary]
+    ),
+  }));
+
+  const micSectionStyle = useAnimatedStyle(() => ({
+    backgroundColor: interpolateColor(
+      themeProgress.value,
+      [0, 1],
+      [lightColors.surface, darkColors.surface]
+    ),
+  }));
 
   return (
-    <SafeAreaView style={styles.container}>
-      <StatusBar style="light" />
-      <View style={styles.header}>
-        <Text style={styles.title}>HoldThatThought</Text>
-        {transcript && (
-          <Pressable onPress={clearTranscript}>
-            <Text style={styles.clearBtn}>Clear</Text>
-          </Pressable>
-        )}
-      </View>
+    <AnimatedView style={[styles.container, containerStyle]}>
+      <AnimatedSafeAreaView style={styles.safeArea}>
+        <StatusBar style={isDark ? 'light' : 'dark'} />
 
-      {error && (
-        <View style={styles.errorContainer}>
-          <Text style={styles.error}>{error}</Text>
+        <AnimatedView style={[styles.header, headerStyle]}>
+          <Animated.Text style={[styles.title, titleStyle]}>HoldThatThought</Animated.Text>
+          <View style={styles.headerRight}>
+            {claims.length > 0 && (
+              <Animated.View entering={FadeIn} exiting={FadeOut}>
+                <Pressable onPress={clearClaims} style={styles.clearBtn}>
+                  <Text style={[styles.clearText, { color: colors.mint }]}>Clear</Text>
+                </Pressable>
+              </Animated.View>
+            )}
+            <Pressable onPress={toggleTheme} style={styles.themeBtn}>
+              <Ionicons
+                name={isDark ? 'sunny-outline' : 'moon-outline'}
+                size={20}
+                color={colors.textSecondary}
+              />
+            </Pressable>
+            <View style={[styles.statusDot, { backgroundColor: colors.border }, isListening && { backgroundColor: colors.mint }]} />
+          </View>
+        </AnimatedView>
+
+        <View style={styles.feedSection}>
+          <ClaimsList
+            claims={claims}
+            onRefresh={clearClaims}
+            refreshing={false}
+          />
         </View>
-      )}
 
-      <View style={styles.content}>
-        <TranscriptView transcript={transcript} status={status} />
-      </View>
-
-      <View style={styles.controls}>
-        <RecordButton
-          status={status}
-          onPress={handleRecordPress}
-          disabled={status === 'processing'}
-        />
-      </View>
-    </SafeAreaView>
+        <AnimatedView style={[styles.micSection, micSectionStyle]}>
+          <MicButton status={status} onPress={toggleListening} />
+        </AnimatedView>
+      </AnimatedSafeAreaView>
+    </AnimatedView>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#000',
+  },
+  safeArea: {
+    flex: 1,
   },
   header: {
     flexDirection: 'row',
@@ -69,30 +123,32 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
   },
   title: {
-    fontSize: 20,
+    fontSize: 24,
     fontWeight: '700',
-    color: '#fff',
+  },
+  headerRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
   },
   clearBtn: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+  },
+  clearText: {
     fontSize: 14,
-    color: '#3b82f6',
+    fontWeight: '500',
   },
-  errorContainer: {
-    marginHorizontal: 20,
-    padding: 12,
-    backgroundColor: '#7f1d1d',
-    borderRadius: 8,
+  themeBtn: {
+    padding: 8,
   },
-  error: {
-    color: '#fca5a5',
-    fontSize: 14,
+  statusDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
   },
-  content: {
+  feedSection: {
     flex: 1,
-    paddingHorizontal: 20,
   },
-  controls: {
-    paddingVertical: 32,
-    alignItems: 'center',
-  },
+  micSection: {},
 });

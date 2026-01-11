@@ -15,7 +15,8 @@
         "NSMicrophoneUsageDescription": "HoldThatThought needs microphone access to transcribe your conversations",
         "UIBackgroundModes": [
           "audio"
-        ]
+        ],
+        "NSSupportsLiveActivities": true
       }
     },
     "android": {
@@ -26,7 +27,14 @@
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
       "edgeToEdgeEnabled": true,
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "permissions": [
+        "android.permission.RECORD_AUDIO",
+        "android.permission.MODIFY_AUDIO_SETTINGS",
+        "android.permission.RECORD_AUDIO",
+        "android.permission.MODIFY_AUDIO_SETTINGS"
+      ],
+      "package": "com.holdthatthought.app"
     },
     "web": {
       "output": "static",
@@ -46,7 +54,8 @@
           }
         }
       ],
-      "expo-audio"
+      "expo-audio",
+      "./plugins/withLiveActivity"
     ],
     "experiments": {
       "typedRoutes": true,
