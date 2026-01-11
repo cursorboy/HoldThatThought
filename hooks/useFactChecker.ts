@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import { FactCheck, ScannerStatus } from '../types';
 import { liveActivity } from '../services/liveActivity';
 import { geminiService } from '../services/gemini';
@@ -57,6 +57,21 @@ export function useFactChecker() {
     console.log('[FactChecker] liveActivity ended');
   }, [stopStreaming]);
 
+  // Listen for Live Activity dismissal (user swiped away)
+  const stopListeningRef = useRef(stopListening);
+  stopListeningRef.current = stopListening;
+
+  useEffect(() => {
+    liveActivity.onDismissed(() => {
+      console.log('[FactChecker] Live Activity dismissed, stopping...');
+      stopListeningRef.current();
+    });
+
+    return () => {
+      liveActivity.removeOnDismissed();
+    };
+  }, []);
+
   const toggleListening = useCallback(async () => {
     console.log('[FactChecker] toggleListening called, isStreaming:', isStreaming);
     if (isStreaming) {
@@ -76,19 +91,19 @@ export function useFactChecker() {
   }, []);
 
   const processTranscript = useCallback(async (transcript: string) => {
-    console.log('[FactChecker] processTranscript called with:', transcript);
-    if (!transcript.trim()) {
+    console.log('[FactChecker] processTranscript called with:', transcript?.slice(0, 50));
+    if (!transcript?.trim()) {
       console.log('[FactChecker] empty transcript, skipping');
       return;
     }
     setError(null);
 
     try {
-      console.log('[FactChecker] calling geminiService.factCheckTranscript...');
+      console.log('[FactChecker] calling geminiService...');
       const factChecks = await geminiService.factCheckTranscript(transcript);
-      console.log('[FactChecker] gemini returned:', factChecks);
+      console.log('[FactChecker] gemini returned:', factChecks?.length, 'results');
       for (const check of factChecks) {
-        console.log('[FactChecker] adding claim:', check);
+        console.log('[FactChecker] adding claim:', check.claim);
         setClaims(prev => [check, ...prev]);
         await liveActivity.update(check.claim);
       }

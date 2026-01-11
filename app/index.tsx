@@ -14,14 +14,14 @@ import { useEffect } from 'react';
 
 import { MicButton } from '../components/MicButton';
 import { ClaimsList } from '../components/ClaimsList';
-import { useFactChecker } from '../hooks/useFactChecker';
+import { useFactCheckerContext } from '../context/FactCheckerContext';
 import { useTheme, useColors, lightColors, darkColors } from '../theme';
 
 const AnimatedView = Animated.View;
 const AnimatedSafeAreaView = Animated.createAnimatedComponent(SafeAreaView);
 
 export default function Index() {
-  const { status, claims, toggleListening, clearClaims } = useFactChecker();
+  const { status, claims, toggleListening, clearClaims } = useFactCheckerContext();
   const { isDark, toggleTheme } = useTheme();
   const { colors } = useColors();
 
@@ -93,11 +93,7 @@ export default function Index() {
         </AnimatedView>
 
         <View style={styles.feedSection}>
-          <ClaimsList
-            claims={claims}
-            onRefresh={clearClaims}
-            refreshing={false}
-          />
+          <ClaimsList claims={claims} />
         </View>
 
         <AnimatedView style={[styles.micSection, micSectionStyle]}>

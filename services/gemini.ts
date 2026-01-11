@@ -1,28 +1,29 @@
-import { FactCheck, Verdict } from '../types';
 import { GEMINI_API_KEY } from '../config';
+import { FactCheck, Verdict } from '../types';
 
 const GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1beta/models';
-const MODEL = 'gemini-2.0-flash';
+const MODEL = 'gemini-3-flash-preview';
 
-const SYSTEM_PROMPT = `You are an LLM model whose task is to offer helpful insights into the core topics of a conversation. Each prompt will be a transcript of a part of the conversation; please extract topics of interest that you think the conversation is/will be focused on, as well as any questions the participants may have asked or topics they seem unsure about, then search the web for salient information about that topic.
+const SYSTEM_PROMPT = `You fact-check conversations. ONLY extract statements that make a specific factual claim that could be TRUE or FALSE. Ignore casual conversation, opinions, and filler.
 
-Please always match the following schema (array of JSON objects):
-[
-    {
-        "topic": <TOPIC>,
-        "info": <INFO>
-    },
-]
+ONLY respond to:
+- Specific factual claims ("X is Y", "X has Y", "X was the first to...")
+- Questions asking for facts ("How many...", "Who was...", "When did...")
 
-Please do not include ANY OTHER INFORMATION OR TEXT besides this formatted information in your response. The response should be ONLY this JSON format, so it can be passed to a JSON parser. Please also ensure that the <TOPIC> field matches exactly to what you searched to find the corresponding information.
+DO NOT respond to:
+- Casual speech ("I think...", "maybe...", "that's cool")
+- Opinions or preferences
+- Incomplete sentences
+- General topics without a verifiable claim
 
-For example, if the transcript contains the text "I love the Aventador ... which engine did the Aventador have again?", then a sample response could be
-[
-    {
-        "topic": "Lamborghini Aventador engine",
-        "info": "6.5-liter V12 engine"
-    }
-]`;
+Output JSON array. Return [] if nothing to fact-check.
+[{"topic": "<short label>", "info": "<brief correction or answer>"}]
+
+Example - "Donald Trump was the third president":
+[{"topic": "Trump presidency", "info": "Donald Trump was the 45th president, not the third."}]
+
+Example - "I love birds, they're so cool":
+[]`;
 
 interface TopicInsight {
   topic: string;
@@ -81,7 +82,18 @@ class GeminiService {
 
   private parseResponse(data: any): FactCheck[] {
     console.log('[Gemini] parseResponse called');
-    const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+    const parts = data.candidates?.[0]?.content?.parts || [];
+    // Combine all parts and strip markdown code blocks
+    let text = parts.map((p: any) => p.text || '').join('');
+    text = text.replace(/```json?\n?/g, '').replace(/```/g, '').trim();
+
+    // Extract only the first JSON array (Gemini sometimes returns duplicates)
+    // Find where second array starts: ]\n[ or ][ pattern
+    const secondArrayIdx = text.search(/\]\s*\[/);
+    if (secondArrayIdx !== -1) {
+      text = text.slice(0, secondArrayIdx + 1); // include the first ]
+    }
+
     console.log('[Gemini] extracted text:', text?.slice(0, 300));
     if (!text) {
       console.log('[Gemini] no text in response');

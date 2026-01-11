@@ -1,8 +1,22 @@
-import { NativeModules, Platform } from 'react-native';
+import { NativeModules, NativeEventEmitter, Platform } from 'react-native';
 
 const { LiveActivityModule } = NativeModules;
 
 const isIOS = Platform.OS === 'ios';
+
+// Event emitter for Live Activity events
+let eventEmitter: NativeEventEmitter | null = null;
+let dismissalCallback: (() => void) | null = null;
+
+if (isIOS && LiveActivityModule) {
+  eventEmitter = new NativeEventEmitter(LiveActivityModule);
+  eventEmitter.addListener('onLiveActivityDismissed', () => {
+    console.log('[LiveActivity] Activity dismissed by user');
+    if (dismissalCallback) {
+      dismissalCallback();
+    }
+  });
+}
 
 export const liveActivity = {
   start: async (sessionId: string): Promise<string | null> => {
@@ -43,5 +57,13 @@ export const liveActivity = {
       console.error('Failed to end Live Activity:', error);
       return false;
     }
+  },
+
+  onDismissed: (callback: () => void) => {
+    dismissalCallback = callback;
+  },
+
+  removeOnDismissed: () => {
+    dismissalCallback = null;
   },
 };
