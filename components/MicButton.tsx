@@ -93,11 +93,18 @@ export function MicButton({ status, onPress }: MicButtonProps) {
   }));
 
   const handlePressIn = () => {
+    console.log('[MicButton] pressIn');
     scale.value = withSpring(0.92, { damping: 15 });
   };
 
   const handlePressOut = () => {
+    console.log('[MicButton] pressOut');
     scale.value = withSpring(1, { damping: 15 });
+  };
+
+  const handlePress = () => {
+    console.log('[MicButton] onPress, status:', status);
+    onPress();
   };
 
   const statusText = isProcessing
@@ -118,7 +125,7 @@ export function MicButton({ status, onPress }: MicButtonProps) {
         />
 
         <Pressable
-          onPress={onPress}
+          onPress={handlePress}
           onPressIn={handlePressIn}
           onPressOut={handlePressOut}
           disabled={isProcessing}

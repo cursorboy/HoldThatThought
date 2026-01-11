@@ -10,6 +10,8 @@ export function useFactChecker() {
   const sessionIdRef = useRef<string>(`session-${Date.now()}`);
   const processTranscriptRef = useRef<(t: string) => Promise<void>>(undefined);
 
+  console.log('[FactChecker] hook initialized');
+
   // Flux transcription with EndOfTurn callback
   const {
     status: streamingStatus,
@@ -20,8 +22,14 @@ export function useFactChecker() {
     isStreaming,
   } = useFluxTranscription({
     onEndOfTurn: (transcript) => {
-      console.log('[Flux] EndOfTurn:', transcript);
+      console.log('[FactChecker] onEndOfTurn received:', transcript);
       processTranscriptRef.current?.(transcript);
+    },
+    onStartOfTurn: () => {
+      console.log('[FactChecker] onStartOfTurn received');
+    },
+    onTranscript: (transcript) => {
+      console.log('[FactChecker] onTranscript:', transcript);
     },
   });
 
@@ -31,18 +39,26 @@ export function useFactChecker() {
     streamingStatus === 'connecting' ? 'processing' : 'idle';
 
   const startListening = useCallback(async () => {
+    console.log('[FactChecker] startListening called');
     setError(null);
     sessionIdRef.current = `session-${Date.now()}`;
+    console.log('[FactChecker] starting liveActivity...');
     await liveActivity.start(sessionIdRef.current);
+    console.log('[FactChecker] liveActivity started, starting streaming...');
     await startStreaming();
+    console.log('[FactChecker] streaming started');
   }, [startStreaming]);
 
   const stopListening = useCallback(async () => {
+    console.log('[FactChecker] stopListening called');
     await stopStreaming();
+    console.log('[FactChecker] streaming stopped');
     await liveActivity.end();
+    console.log('[FactChecker] liveActivity ended');
   }, [stopStreaming]);
 
   const toggleListening = useCallback(async () => {
+    console.log('[FactChecker] toggleListening called, isStreaming:', isStreaming);
     if (isStreaming) {
       await stopListening();
     } else {
@@ -60,16 +76,24 @@ export function useFactChecker() {
   }, []);
 
   const processTranscript = useCallback(async (transcript: string) => {
-    if (!transcript.trim()) return;
+    console.log('[FactChecker] processTranscript called with:', transcript);
+    if (!transcript.trim()) {
+      console.log('[FactChecker] empty transcript, skipping');
+      return;
+    }
     setError(null);
 
     try {
+      console.log('[FactChecker] calling geminiService.factCheckTranscript...');
       const factChecks = await geminiService.factCheckTranscript(transcript);
+      console.log('[FactChecker] gemini returned:', factChecks);
       for (const check of factChecks) {
+        console.log('[FactChecker] adding claim:', check);
         setClaims(prev => [check, ...prev]);
         await liveActivity.update(check.claim);
       }
     } catch (err) {
+      console.log('[FactChecker] processTranscript ERROR:', err);
       setError(err instanceof Error ? err.message : 'Fact-check failed');
     }
   }, []);
