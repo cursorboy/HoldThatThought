@@ -2,6 +2,7 @@ export const lightColors = {
   // Backgrounds
   background: '#FFFFFF',
   surface: '#F8FAFA',
+  surfaceAlt: '#E5E7EB',
 
   // Primary accent - Mint
   mint: '#00D9A4',
@@ -38,6 +39,7 @@ export const darkColors = {
   // Backgrounds
   background: '#0A0C10',
   surface: '#12151C',
+  surfaceAlt: '#2A3140',
 
   // Primary accent - Mint (same)
   mint: '#00D9A4',

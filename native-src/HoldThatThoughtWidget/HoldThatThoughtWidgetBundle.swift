@@ -2,7 +2,7 @@ import SwiftUI
 import WidgetKit
 
 @main
-@available(iOS 16.1, *)
+@available(iOS 16.2, *)
 struct HoldThatThoughtWidgetBundle: WidgetBundle {
     var body: some Widget {
         HoldThatThoughtLiveActivity()

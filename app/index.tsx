@@ -1,4 +1,4 @@
-import { View, Text, Pressable, StyleSheet } from 'react-native';
+import { View, Text, Pressable, StyleSheet, Image } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { Ionicons } from '@expo/vector-icons';
@@ -9,6 +9,7 @@ import Animated, {
   withTiming,
   useSharedValue,
   interpolateColor,
+  interpolate,
 } from 'react-native-reanimated';
 import { useEffect } from 'react';
 
@@ -58,11 +59,12 @@ export default function Index() {
     ),
   }));
 
-  const micSectionStyle = useAnimatedStyle(() => ({
+  const knobStyle = useAnimatedStyle(() => ({
+    transform: [{ translateX: interpolate(themeProgress.value, [0, 1], [0, 16]) }],
     backgroundColor: interpolateColor(
       themeProgress.value,
       [0, 1],
-      [lightColors.surface, darkColors.surface]
+      [lightColors.mint, darkColors.textPrimary]
     ),
   }));
 
@@ -72,7 +74,14 @@ export default function Index() {
         <StatusBar style={isDark ? 'light' : 'dark'} />
 
         <AnimatedView style={[styles.header, headerStyle]}>
-          <Animated.Text style={[styles.title, titleStyle]}>HoldThatThought</Animated.Text>
+          <View style={styles.headerLeft}>
+            <Image
+              source={require('../assets/images/logo.png')}
+              style={styles.logo}
+              resizeMode="contain"
+            />
+            <Animated.Text style={[styles.title, titleStyle]}>Hold That Thought</Animated.Text>
+          </View>
           <View style={styles.headerRight}>
             {claims.length > 0 && (
               <Animated.View entering={FadeIn} exiting={FadeOut}>
@@ -81,25 +90,26 @@ export default function Index() {
                 </Pressable>
               </Animated.View>
             )}
-            <Pressable onPress={toggleTheme} style={styles.themeBtn}>
-              <Ionicons
-                name={isDark ? 'sunny-outline' : 'moon-outline'}
-                size={20}
-                color={colors.textSecondary}
-              />
+            <Pressable onPress={toggleTheme} style={[styles.themeToggle, { backgroundColor: colors.surfaceAlt, borderColor: colors.border, borderWidth: 1 }]}>
+              <Animated.View style={[styles.themeToggleKnob, knobStyle]}>
+                <Ionicons
+                  name={isDark ? 'moon' : 'sunny'}
+                  size={14}
+                  color={isDark ? colors.surface : '#fff'}
+                />
+              </Animated.View>
             </Pressable>
-            <View style={[styles.statusDot, { backgroundColor: colors.border }, isListening && { backgroundColor: colors.mint }]} />
           </View>
         </AnimatedView>
 
         <View style={styles.feedSection}>
           <ClaimsList claims={claims} />
         </View>
-
-        <AnimatedView style={[styles.micSection, micSectionStyle]}>
-          <MicButton status={status} onPress={toggleListening} />
-        </AnimatedView>
       </AnimatedSafeAreaView>
+
+      <View style={styles.micFloating}>
+        <MicButton status={status} onPress={toggleListening} />
+      </View>
     </AnimatedView>
   );
 }
@@ -118,8 +128,18 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingVertical: 16,
   },
+  headerLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  logo: {
+    width: 56,
+    height: 56,
+    marginLeft: -8,
+  },
   title: {
-    fontSize: 24,
+    fontSize: 20,
     fontWeight: '700',
   },
   headerRight: {
@@ -135,16 +155,27 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '500',
   },
-  themeBtn: {
-    padding: 8,
+  themeToggle: {
+    width: 44,
+    height: 28,
+    borderRadius: 14,
+    justifyContent: 'center',
+    paddingHorizontal: 3,
   },
-  statusDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
+  themeToggleKnob: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   feedSection: {
     flex: 1,
   },
-  micSection: {},
+  micFloating: {
+    position: 'absolute',
+    bottom: 50,
+    left: 0,
+    right: 0,
+  },
 });

@@ -1,7 +1,18 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { FactCheck, ScannerStatus } from '../types';
 import { liveActivity } from '../services/liveActivity';
+import { groqService } from '../services/groq';
 import { geminiService } from '../services/gemini';
+import { perplexityService } from '../services/perplexity';
+import { LLM_PROVIDER } from '../config';
+
+const getLLMService = () => {
+  switch (LLM_PROVIDER) {
+    case 'perplexity': return perplexityService;
+    case 'groq': return groqService;
+    case 'gemini': return geminiService;
+  }
+};
 import { useFluxTranscription } from './useFluxTranscription';
 
 export function useFactChecker() {
@@ -83,7 +94,7 @@ export function useFactChecker() {
 
   const addClaim = useCallback(async (claim: FactCheck) => {
     setClaims(prev => [claim, ...prev]);
-    await liveActivity.update(claim.claim);
+    await liveActivity.update(claim.explanation);
   }, []);
 
   const clearClaims = useCallback(() => {
@@ -91,7 +102,10 @@ export function useFactChecker() {
   }, []);
 
   const processTranscript = useCallback(async (transcript: string) => {
-    console.log('[FactChecker] processTranscript called with:', transcript?.slice(0, 50));
+    const startTime = Date.now();
+    console.log(`[FactChecker] ⏱️ START processTranscript at ${startTime}`);
+    console.log('[FactChecker] transcript:', transcript?.slice(0, 50));
+
     if (!transcript?.trim()) {
       console.log('[FactChecker] empty transcript, skipping');
       return;
@@ -99,14 +113,25 @@ export function useFactChecker() {
     setError(null);
 
     try {
-      console.log('[FactChecker] calling geminiService...');
-      const factChecks = await geminiService.factCheckTranscript(transcript);
-      console.log('[FactChecker] gemini returned:', factChecks?.length, 'results');
+      const llmStart = Date.now();
+      console.log(`[FactChecker] ⏱️ Calling ${LLM_PROVIDER} at +${llmStart - startTime}ms`);
+
+      const factChecks = await getLLMService().factCheckTranscript(transcript);
+
+      const llmEnd = Date.now();
+      console.log(`[FactChecker] ⏱️ ${LLM_PROVIDER} returned in ${llmEnd - llmStart}ms, ${factChecks?.length} results`);
+
       for (const check of factChecks) {
-        console.log('[FactChecker] adding claim:', check.claim);
+        const updateStart = Date.now();
+        console.log(`[FactChecker] ⏱️ Updating Live Activity at +${updateStart - startTime}ms`);
+
         setClaims(prev => [check, ...prev]);
-        await liveActivity.update(check.claim);
+        await liveActivity.update(check.explanation);
+
+        console.log(`[FactChecker] ⏱️ Live Activity updated in ${Date.now() - updateStart}ms`);
       }
+
+      console.log(`[FactChecker] ⏱️ TOTAL TIME: ${Date.now() - startTime}ms`);
     } catch (err) {
       console.log('[FactChecker] processTranscript ERROR:', err);
       setError(err instanceof Error ? err.message : 'Fact-check failed');

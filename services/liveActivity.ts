@@ -34,11 +34,14 @@ export const liveActivity = {
   },
 
   update: async (claimText: string): Promise<boolean> => {
+    const startTime = Date.now();
+    console.log(`[LiveActivity] ⏱️ update called at ${startTime}`);
     if (!isIOS || !LiveActivityModule) {
       return false;
     }
     try {
       await LiveActivityModule.updateActivity(claimText);
+      console.log(`[LiveActivity] ⏱️ update completed in ${Date.now() - startTime}ms`);
       return true;
     } catch (error) {
       console.error('Failed to update Live Activity:', error);
@@ -65,5 +68,22 @@ export const liveActivity = {
 
   removeOnDismissed: () => {
     dismissalCallback = null;
+  },
+
+  checkPendingWidgetAction: async (): Promise<string | null> => {
+    console.log('[LiveActivity] checkPendingWidgetAction called, isIOS:', isIOS, 'hasModule:', !!LiveActivityModule);
+    if (!isIOS || !LiveActivityModule) {
+      console.log('[LiveActivity] Skipping - not iOS or no module');
+      return null;
+    }
+    try {
+      console.log('[LiveActivity] Calling native checkPendingWidgetAction...');
+      const action = await LiveActivityModule.checkPendingWidgetAction();
+      console.log('[LiveActivity] Native returned:', action);
+      return action;
+    } catch (error) {
+      console.error('[LiveActivity] Failed to check pending widget action:', error);
+      return null;
+    }
   },
 };

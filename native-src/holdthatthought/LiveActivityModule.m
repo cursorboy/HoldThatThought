@@ -14,4 +14,7 @@ RCT_EXTERN_METHOD(updateActivity:(NSString *)claimText
 RCT_EXTERN_METHOD(endActivity:(RCTPromiseResolveBlock)resolve
                   rejecter:(RCTPromiseRejectBlock)reject)
 
+RCT_EXTERN_METHOD(checkPendingWidgetAction:(RCTPromiseResolveBlock)resolve
+                  rejecter:(RCTPromiseRejectBlock)reject)
+
 @end

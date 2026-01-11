@@ -53,3 +53,8 @@ export interface FluxMessage {
 }
 
 export type StreamingStatus = 'idle' | 'connecting' | 'streaming' | 'error';
+
+export interface DeepDiveResponse {
+  details: string;
+  sources: Source[];
+}

@@ -56,8 +56,9 @@ class DeepgramFluxService {
         };
 
         this.ws.onmessage = (event) => {
-          console.log('[DeepgramFlux] onmessage:', event.data);
-          this.handleMessage(event.data);
+          const receiveTime = Date.now();
+          console.log(`[DeepgramFlux] ⏱️ onmessage at ${receiveTime}:`, event.data?.slice?.(0, 100) || event.data);
+          this.handleMessage(event.data, receiveTime);
         };
 
         this.ws.onerror = (event) => {
@@ -78,7 +79,7 @@ class DeepgramFluxService {
     });
   }
 
-  private handleMessage(data: string) {
+  private handleMessage(data: string, receiveTime: number) {
     try {
       const message: FluxMessage = JSON.parse(data);
       console.log('[DeepgramFlux] handleMessage type:', message.type, 'event:', message.event);
@@ -99,9 +100,11 @@ class DeepgramFluxService {
             break;
 
           case 'EndOfTurn':
-            console.log('[DeepgramFlux] EndOfTurn, transcript:', message.transcript);
+            console.log(`[DeepgramFlux] ⏱️ EndOfTurn received at ${receiveTime}, dispatching callback`);
+            console.log('[DeepgramFlux] EndOfTurn transcript:', message.transcript);
             if (message.transcript) {
               this.config.onEndOfTurn?.(message.transcript, turnIndex);
+              console.log(`[DeepgramFlux] ⏱️ EndOfTurn callback dispatched at ${Date.now()}`);
             }
             break;
 

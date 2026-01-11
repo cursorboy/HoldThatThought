@@ -10,13 +10,18 @@
     "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.holdthatthought.app",
+      "bundleIdentifier": "com.holdthatthought.app.piam",
       "infoPlist": {
-        "NSMicrophoneUsageDescription": "HoldThatThought needs microphone access to transcribe your conversations",
+        "NSMicrophoneUsageDescription": "Hold That Thought needs microphone access to transcribe your conversations",
         "UIBackgroundModes": [
           "audio"
         ],
-        "NSSupportsLiveActivities": true
+        "NSSupportsLiveActivities": true,
+        "CFBundleURLTypes": [
+          {
+            "CFBundleURLSchemes": ["holdthatthought"]
+          }
+        ]
       }
     },
     "android": {

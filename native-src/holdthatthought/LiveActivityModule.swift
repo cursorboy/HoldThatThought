@@ -21,13 +21,21 @@ class LiveActivityModule: RCTEventEmitter {
     }
 
     @objc func startActivity(_ sessionId: String, resolver: @escaping RCTPromiseResolveBlock, rejecter: @escaping RCTPromiseRejectBlock) {
-        guard #available(iOS 16.1, *) else {
-            rejecter("UNSUPPORTED", "Live Activities require iOS 16.1+", nil)
+        print("[LiveActivityModule] startActivity called with sessionId: \(sessionId)")
+
+        guard #available(iOS 16.2, *) else {
+            print("[LiveActivityModule] ERROR: iOS 16.2+ required")
+            rejecter("UNSUPPORTED", "Live Activities require iOS 16.2+", nil)
             return
         }
 
-        guard ActivityAuthorizationInfo().areActivitiesEnabled else {
-            rejecter("LIVE_ACTIVITY_DISABLED", "Live Activities are disabled", nil)
+        let authInfo = ActivityAuthorizationInfo()
+        print("[LiveActivityModule] areActivitiesEnabled: \(authInfo.areActivitiesEnabled)")
+        print("[LiveActivityModule] frequentPushesEnabled: \(authInfo.frequentPushesEnabled)")
+
+        guard authInfo.areActivitiesEnabled else {
+            print("[LiveActivityModule] ERROR: Live Activities are disabled in Settings")
+            rejecter("LIVE_ACTIVITY_DISABLED", "Live Activities are disabled. Enable in Settings > App > Live Activities", nil)
             return
         }
 
@@ -50,17 +58,20 @@ class LiveActivityModule: RCTEventEmitter {
         )
 
         do {
+            print("[LiveActivityModule] Creating activity content...")
             let activityContent = ActivityContent(
                 state: initialState,
                 staleDate: nil
             )
 
+            print("[LiveActivityModule] Requesting activity...")
             let activity = try Activity.request(
                 attributes: attributes,
                 content: activityContent,
                 pushType: nil
             )
 
+            print("[LiveActivityModule] Activity created with id: \(activity.id)")
             currentActivity = activity
 
             // Observe activity state for dismissal
@@ -74,15 +85,17 @@ class LiveActivityModule: RCTEventEmitter {
                 }
             }
 
+            print("[LiveActivityModule] SUCCESS - returning activity id")
             resolver(activity.id)
         } catch {
+            print("[LiveActivityModule] ERROR: \(error)")
             rejecter("START_FAILED", "Failed to start Live Activity: \(error.localizedDescription)", error)
         }
     }
 
     @objc func updateActivity(_ claimText: String, resolver: @escaping RCTPromiseResolveBlock, rejecter: @escaping RCTPromiseRejectBlock) {
-        guard #available(iOS 16.1, *) else {
-            rejecter("UNSUPPORTED", "Live Activities require iOS 16.1+", nil)
+        guard #available(iOS 16.2, *) else {
+            rejecter("UNSUPPORTED", "Live Activities require iOS 16.2+", nil)
             return
         }
 
@@ -110,7 +123,7 @@ class LiveActivityModule: RCTEventEmitter {
         observationTask?.cancel()
         observationTask = nil
 
-        guard #available(iOS 16.1, *) else {
+        guard #available(iOS 16.2, *) else {
             resolver(true)
             return
         }
@@ -124,6 +137,19 @@ class LiveActivityModule: RCTEventEmitter {
             await activity.end(nil, dismissalPolicy: .immediate)
             currentActivity = nil
             resolver(true)
+        }
+    }
+
+    @objc func checkPendingWidgetAction(_ resolver: @escaping RCTPromiseResolveBlock, rejecter: @escaping RCTPromiseRejectBlock) {
+        // Check for pending action from widget intent (set via UserDefaults)
+        if let action = UserDefaults.standard.string(forKey: "pendingWidgetAction") {
+            print("[LiveActivityModule] Found pending widget action: \(action)")
+            // Clear the flag after reading
+            UserDefaults.standard.removeObject(forKey: "pendingWidgetAction")
+            UserDefaults.standard.synchronize()
+            resolver(action)
+        } else {
+            resolver(nil)
         }
     }
 }

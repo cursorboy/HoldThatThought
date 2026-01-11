@@ -1,5 +1,5 @@
 import { GEMINI_API_KEY } from '../config';
-import { FactCheck, Verdict } from '../types';
+import { FactCheck, Verdict, DeepDiveResponse, Source } from '../types';
 
 const GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1beta/models';
 const MODEL = 'gemini-3-flash-preview';
@@ -15,7 +15,7 @@ DO NOT respond to:
 - Opinions or preferences
 - Incomplete sentences
 - General topics without a verifiable claim
-
+ALWAYS USE THE MOST RECENT INFORMATION TO PROVIDE THE CORRECT ANSWER. ALWAYS USE GOOGLE AND THE INTERNET TO FIND THE MOST RECENT INFORMATION.
 Output JSON array. Return [] if nothing to fact-check.
 [{"topic": "<short label>", "info": "<brief correction or answer>"}]
 
@@ -117,6 +117,67 @@ class GeminiService {
     } catch (err) {
       console.log('[Gemini] parseResponse JSON parse error:', err);
       return [];
+    }
+  }
+
+  async getDeepDiveInfo(claim: string, context: string): Promise<DeepDiveResponse> {
+    console.log('[Gemini] getDeepDiveInfo called for:', claim);
+
+    if (!this.apiKey || this.apiKey === 'YOUR_API_KEY_HERE') {
+      throw new Error('Add your Gemini API key in config.ts');
+    }
+
+    const deepDivePrompt = `Given this fact-check topic and context, provide MORE detailed information with sources.
+
+Topic: ${claim}
+Context: ${context}
+
+SEARCH THE INTERNET for authoritative sources. Return JSON:
+{"details": "<2-3 sentences with more detail>", "sources": [{"title": "<source name>", "url": "<full URL>"}]}
+
+Include 2-4 credible sources with real URLs. Focus on recent, authoritative sources.`;
+
+    const response = await fetch(
+      `${GEMINI_API_URL}/${MODEL}:generateContent?key=${this.apiKey}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: deepDivePrompt }] }],
+          generationConfig: {
+            responseMimeType: 'application/json',
+            temperature: 0.3,
+          },
+          tools: [{ googleSearch: {} }],
+        }),
+      }
+    );
+
+    if (!response.ok) {
+      const error = await response.text();
+      console.log('[Gemini] Deep dive API error:', error);
+      throw new Error(`Gemini API error: ${error}`);
+    }
+
+    const data = await response.json();
+    console.log('[Gemini] deep dive response:', JSON.stringify(data).slice(0, 500));
+
+    const parts = data.candidates?.[0]?.content?.parts || [];
+    let text = parts.map((p: any) => p.text || '').join('');
+    text = text.replace(/```json?\n?/g, '').replace(/```/g, '').trim();
+
+    try {
+      const parsed = JSON.parse(text);
+      return {
+        details: parsed.details || '',
+        sources: (parsed.sources || []).map((s: any) => ({
+          title: s.title || 'Source',
+          url: s.url || '',
+        })).filter((s: Source) => s.url),
+      };
+    } catch (err) {
+      console.log('[Gemini] deep dive parse error:', err);
+      return { details: '', sources: [] };
     }
   }
 }

@@ -3,9 +3,26 @@ const path = require('path');
 const fs = require('fs');
 
 const WIDGET_NAME = 'HoldThatThoughtWidget';
-const WIDGET_BUNDLE_ID = 'com.holdthatthought.app.widget';
-const APP_GROUP = 'group.com.holdthatthought.app';
+const WIDGET_BUNDLE_ID = 'com.holdthatthought.app.piam.widget';
+const APP_GROUP = 'group.com.holdthatthought.app.piam';
 const DEPLOYMENT_TARGET = '16.2';
+
+// Recursively copy directory
+function copyDirRecursive(src, dst) {
+  if (!fs.existsSync(dst)) {
+    fs.mkdirSync(dst, { recursive: true });
+  }
+  const entries = fs.readdirSync(src, { withFileTypes: true });
+  for (const entry of entries) {
+    const srcPath = path.join(src, entry.name);
+    const dstPath = path.join(dst, entry.name);
+    if (entry.isDirectory()) {
+      copyDirRecursive(srcPath, dstPath);
+    } else {
+      fs.copyFileSync(srcPath, dstPath);
+    }
+  }
+}
 
 // Copy native source files to ios directory
 function copyNativeSourceFiles(projectRoot) {
@@ -17,13 +34,36 @@ function copyNativeSourceFiles(projectRoot) {
   const mainAppDst = path.join(iosPath, 'holdthatthought');
 
   if (fs.existsSync(mainAppSrc)) {
-    const files = fs.readdirSync(mainAppSrc);
-    for (const file of files) {
-      const srcFile = path.join(mainAppSrc, file);
-      const dstFile = path.join(mainAppDst, file);
-      fs.copyFileSync(srcFile, dstFile);
-      console.log(`[withLiveActivity] Copied ${file} to main app`);
+    const entries = fs.readdirSync(mainAppSrc, { withFileTypes: true });
+    for (const entry of entries) {
+      const srcPath = path.join(mainAppSrc, entry.name);
+      const dstPath = path.join(mainAppDst, entry.name);
+      if (entry.isDirectory()) {
+        copyDirRecursive(srcPath, dstPath);
+        console.log(`[withLiveActivity] Copied ${entry.name}/ to main app`);
+      } else {
+        fs.copyFileSync(srcPath, dstPath);
+        console.log(`[withLiveActivity] Copied ${entry.name} to main app`);
+      }
     }
+  }
+
+  // Copy shared intent file to BOTH main app AND widget (required for openAppWhenRun)
+  const sharedIntentSrc = path.join(nativeSrcPath, 'SharedIntent', 'StartListeningIntent.swift');
+  if (fs.existsSync(sharedIntentSrc)) {
+    // Copy to main app
+    const mainAppIntentDst = path.join(mainAppDst, 'StartListeningIntent.swift');
+    fs.copyFileSync(sharedIntentSrc, mainAppIntentDst);
+    console.log('[withLiveActivity] Copied StartListeningIntent.swift to main app');
+
+    // Copy to widget
+    const widgetDst = path.join(iosPath, WIDGET_NAME);
+    if (!fs.existsSync(widgetDst)) {
+      fs.mkdirSync(widgetDst, { recursive: true });
+    }
+    const widgetIntentDst = path.join(widgetDst, 'StartListeningIntent.swift');
+    fs.copyFileSync(sharedIntentSrc, widgetIntentDst);
+    console.log('[withLiveActivity] Copied StartListeningIntent.swift to widget');
   }
 
   // Copy widget files
@@ -34,12 +74,17 @@ function copyNativeSourceFiles(projectRoot) {
     if (!fs.existsSync(widgetDst)) {
       fs.mkdirSync(widgetDst, { recursive: true });
     }
-    const files = fs.readdirSync(widgetSrc);
-    for (const file of files) {
-      const srcFile = path.join(widgetSrc, file);
-      const dstFile = path.join(widgetDst, file);
-      fs.copyFileSync(srcFile, dstFile);
-      console.log(`[withLiveActivity] Copied ${file} to widget`);
+    const entries = fs.readdirSync(widgetSrc, { withFileTypes: true });
+    for (const entry of entries) {
+      const srcPath = path.join(widgetSrc, entry.name);
+      const dstPath = path.join(widgetDst, entry.name);
+      if (entry.isDirectory()) {
+        copyDirRecursive(srcPath, dstPath);
+        console.log(`[withLiveActivity] Copied ${entry.name}/ to widget`);
+      } else {
+        fs.copyFileSync(srcPath, dstPath);
+        console.log(`[withLiveActivity] Copied ${entry.name} to widget`);
+      }
     }
   }
 }
@@ -51,12 +96,8 @@ function withLiveActivityInfoPlist(config) {
   });
 }
 
-function withAppGroupEntitlement(config) {
-  return withEntitlementsPlist(config, (config) => {
-    config.modResults['com.apple.security.application-groups'] = [APP_GROUP];
-    return config;
-  });
-}
+// App Group entitlement removed - requires paid developer account
+// Using OpenURLIntent instead which doesn't need App Groups
 
 function withLiveActivityWidget(config) {
   return withXcodeProject(config, async (config) => {
@@ -65,6 +106,7 @@ function withLiveActivityWidget(config) {
     const projectName = config.modRequest.projectName;
     const iosPath = path.join(projectRoot, 'ios');
     const widgetPath = path.join(iosPath, WIDGET_NAME);
+    const mainAppPath = path.join(iosPath, 'holdthatthought');
 
     // Copy native source files first
     copyNativeSourceFiles(projectRoot);
@@ -72,6 +114,123 @@ function withLiveActivityWidget(config) {
     // Get main target
     const mainTarget = xcodeProject.getFirstTarget();
     const mainTargetUuid = mainTarget.uuid;
+
+    // Add LiveActivity native module files to main app target (including shared intent)
+    const mainAppNativeFiles = [
+      { name: 'LiveActivityModule.swift', type: 'sourcecode.swift' },
+      { name: 'LiveActivityModule.m', type: 'sourcecode.c.objc' },
+      { name: 'LiveActivityAttributes.swift', type: 'sourcecode.swift' },
+      { name: 'StartListeningIntent.swift', type: 'sourcecode.swift' },
+    ];
+
+    // Find main app's source build phase
+    const nativeTargets = xcodeProject.hash.project.objects['PBXNativeTarget'];
+    let mainSourcesBuildPhaseUuid = null;
+
+    for (const targetUuid in nativeTargets) {
+      const target = nativeTargets[targetUuid];
+      if (target && (target.name === projectName || target.productType === '"com.apple.product-type.application"')) {
+        if (target.buildPhases) {
+          for (const phase of target.buildPhases) {
+            const phaseUuid = phase.value || phase;
+            const sourcesPhases = xcodeProject.hash.project.objects['PBXSourcesBuildPhase'];
+            if (sourcesPhases && sourcesPhases[phaseUuid]) {
+              mainSourcesBuildPhaseUuid = phaseUuid;
+              break;
+            }
+          }
+        }
+        break;
+      }
+    }
+
+    // Find main app group
+    const mainGroupKey = xcodeProject.getFirstProject().firstProject.mainGroup;
+    const groups = xcodeProject.hash.project.objects['PBXGroup'];
+    let mainAppGroupKey = null;
+
+    if (groups && groups[mainGroupKey] && groups[mainGroupKey].children) {
+      for (const child of groups[mainGroupKey].children) {
+        const childUuid = child.value || child;
+        if (groups[childUuid] && groups[childUuid].name === projectName) {
+          mainAppGroupKey = childUuid;
+          break;
+        }
+      }
+    }
+
+    // Add native module files to main app
+    for (const fileInfo of mainAppNativeFiles) {
+      const filePath = path.join(mainAppPath, fileInfo.name);
+      if (!fs.existsSync(filePath)) {
+        console.log(`[withLiveActivity] File not found: ${filePath}`);
+        continue;
+      }
+
+      // Check if file already exists in project
+      const fileRefs = xcodeProject.hash.project.objects['PBXFileReference'];
+      let existingRef = null;
+      for (const refUuid in fileRefs) {
+        if (fileRefs[refUuid] && fileRefs[refUuid].path === fileInfo.name) {
+          existingRef = refUuid;
+          break;
+        }
+      }
+
+      if (existingRef) {
+        console.log(`[withLiveActivity] ${fileInfo.name} already in project`);
+        continue;
+      }
+
+      // Create file reference
+      const fileRefUuid = xcodeProject.generateUuid();
+      xcodeProject.hash.project.objects['PBXFileReference'] =
+        xcodeProject.hash.project.objects['PBXFileReference'] || {};
+      xcodeProject.hash.project.objects['PBXFileReference'][fileRefUuid] = {
+        isa: 'PBXFileReference',
+        fileEncoding: 4,
+        lastKnownFileType: fileInfo.type,
+        name: fileInfo.name,
+        path: `holdthatthought/${fileInfo.name}`,
+        sourceTree: '"<group>"',
+      };
+      xcodeProject.hash.project.objects['PBXFileReference'][`${fileRefUuid}_comment`] = fileInfo.name;
+
+      // Add to main app group
+      if (mainAppGroupKey && groups[mainAppGroupKey] && groups[mainAppGroupKey].children) {
+        groups[mainAppGroupKey].children.push({
+          value: fileRefUuid,
+          comment: fileInfo.name,
+        });
+      }
+
+      // Create build file
+      const buildFileUuid = xcodeProject.generateUuid();
+      xcodeProject.hash.project.objects['PBXBuildFile'] =
+        xcodeProject.hash.project.objects['PBXBuildFile'] || {};
+      xcodeProject.hash.project.objects['PBXBuildFile'][buildFileUuid] = {
+        isa: 'PBXBuildFile',
+        fileRef: fileRefUuid,
+        fileRef_comment: fileInfo.name,
+      };
+      xcodeProject.hash.project.objects['PBXBuildFile'][`${buildFileUuid}_comment`] =
+        `${fileInfo.name} in Sources`;
+
+      // Add to main app's Sources build phase
+      if (mainSourcesBuildPhaseUuid) {
+        const sourcesPhases = xcodeProject.hash.project.objects['PBXSourcesBuildPhase'];
+        if (sourcesPhases && sourcesPhases[mainSourcesBuildPhaseUuid]) {
+          sourcesPhases[mainSourcesBuildPhaseUuid].files =
+            sourcesPhases[mainSourcesBuildPhaseUuid].files || [];
+          sourcesPhases[mainSourcesBuildPhaseUuid].files.push({
+            value: buildFileUuid,
+            comment: `${fileInfo.name} in Sources`,
+          });
+        }
+      }
+
+      console.log(`[withLiveActivity] Added ${fileInfo.name} to main app target`);
+    }
 
     // Check if widget target already exists
     const existingTarget = xcodeProject.pbxTargetByName(WIDGET_NAME);
@@ -96,16 +255,16 @@ function withLiveActivityWidget(config) {
     // Create PBXGroup for widget files
     const widgetGroupKey = xcodeProject.pbxCreateGroup(WIDGET_NAME, WIDGET_NAME);
 
-    // Get main group and add widget group
-    const mainGroupKey = xcodeProject.getFirstProject().firstProject.mainGroup;
+    // Add widget group to main group (mainGroupKey already defined above)
     xcodeProject.addToPbxGroup(widgetGroupKey, mainGroupKey);
 
-    // Widget source files
+    // Widget source files (including shared intent)
     const widgetSwiftFiles = [
       'HoldThatThoughtWidgetBundle.swift',
       'HoldThatThoughtAttributes.swift',
       'HoldThatThoughtLiveActivity.swift',
       'HoldThatThoughtControl.swift',
+      'StartListeningIntent.swift',
     ];
 
     // Create Sources build phase for widget target
@@ -120,8 +279,7 @@ function withLiveActivityWidget(config) {
     };
     xcodeProject.hash.project.objects['PBXSourcesBuildPhase'][`${widgetSourcesBuildPhaseUuid}_comment`] = 'Sources';
 
-    // Add Sources build phase to widget target
-    const nativeTargets = xcodeProject.hash.project.objects['PBXNativeTarget'];
+    // Add Sources build phase to widget target (nativeTargets already defined above)
     if (nativeTargets[widgetTargetUuid]) {
       nativeTargets[widgetTargetUuid].buildPhases = nativeTargets[widgetTargetUuid].buildPhases || [];
       nativeTargets[widgetTargetUuid].buildPhases.unshift({
@@ -209,6 +367,70 @@ function withLiveActivityWidget(config) {
           comment: plistFileName,
         });
       }
+    }
+
+    // Add Assets.xcassets to widget target
+    const assetsPath = path.join(widgetPath, 'Assets.xcassets');
+    if (fs.existsSync(assetsPath)) {
+      // Create Resources build phase for widget
+      const widgetResourcesBuildPhaseUuid = xcodeProject.generateUuid();
+      xcodeProject.hash.project.objects['PBXResourcesBuildPhase'] =
+        xcodeProject.hash.project.objects['PBXResourcesBuildPhase'] || {};
+      xcodeProject.hash.project.objects['PBXResourcesBuildPhase'][widgetResourcesBuildPhaseUuid] = {
+        isa: 'PBXResourcesBuildPhase',
+        buildActionMask: 2147483647,
+        files: [],
+        runOnlyForDeploymentPostprocessing: 0,
+      };
+      xcodeProject.hash.project.objects['PBXResourcesBuildPhase'][`${widgetResourcesBuildPhaseUuid}_comment`] = 'Resources';
+
+      // Add Resources build phase to widget target
+      if (nativeTargets[widgetTargetUuid]) {
+        nativeTargets[widgetTargetUuid].buildPhases = nativeTargets[widgetTargetUuid].buildPhases || [];
+        nativeTargets[widgetTargetUuid].buildPhases.push({
+          value: widgetResourcesBuildPhaseUuid,
+          comment: 'Resources',
+        });
+      }
+
+      // Create file reference for Assets.xcassets
+      const assetsRefUuid = xcodeProject.generateUuid();
+      xcodeProject.hash.project.objects['PBXFileReference'][assetsRefUuid] = {
+        isa: 'PBXFileReference',
+        lastKnownFileType: 'folder.assetcatalog',
+        path: 'Assets.xcassets',
+        sourceTree: '"<group>"',
+      };
+      xcodeProject.hash.project.objects['PBXFileReference'][`${assetsRefUuid}_comment`] = 'Assets.xcassets';
+
+      // Add to widget group
+      const groups = xcodeProject.hash.project.objects['PBXGroup'];
+      if (groups && groups[widgetGroupKey] && groups[widgetGroupKey].children) {
+        groups[widgetGroupKey].children.push({
+          value: assetsRefUuid,
+          comment: 'Assets.xcassets',
+        });
+      }
+
+      // Create build file for assets
+      const assetsBuildFileUuid = xcodeProject.generateUuid();
+      xcodeProject.hash.project.objects['PBXBuildFile'][assetsBuildFileUuid] = {
+        isa: 'PBXBuildFile',
+        fileRef: assetsRefUuid,
+        fileRef_comment: 'Assets.xcassets',
+      };
+      xcodeProject.hash.project.objects['PBXBuildFile'][`${assetsBuildFileUuid}_comment`] = 'Assets.xcassets in Resources';
+
+      // Add to Resources build phase
+      const resourcesPhases = xcodeProject.hash.project.objects['PBXResourcesBuildPhase'];
+      if (resourcesPhases && resourcesPhases[widgetResourcesBuildPhaseUuid]) {
+        resourcesPhases[widgetResourcesBuildPhaseUuid].files.push({
+          value: assetsBuildFileUuid,
+          comment: 'Assets.xcassets in Resources',
+        });
+      }
+
+      console.log('[withLiveActivity] Added Assets.xcassets to widget target');
     }
 
     // Configure build settings for widget target
@@ -307,7 +529,7 @@ function withLiveActivityWidget(config) {
 
 module.exports = function withLiveActivity(config) {
   config = withLiveActivityInfoPlist(config);
-  config = withAppGroupEntitlement(config);
+  // withAppGroupEntitlement removed - requires paid developer account
   config = withLiveActivityWidget(config);
   return config;
 };

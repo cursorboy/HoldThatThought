@@ -170,9 +170,12 @@ export function useFluxTranscription(options: UseFluxTranscriptionOptions = {}) 
           optionsRef.current.onStartOfTurn?.();
         },
         onEndOfTurn: (transcript, idx) => {
+          const callbackTime = Date.now();
+          console.log(`[FluxTranscription] ⏱️ onEndOfTurn callback received at ${callbackTime}`);
           setTurnIndex(idx);
           setCurrentTranscript(transcript);
           optionsRef.current.onEndOfTurn?.(transcript);
+          console.log(`[FluxTranscription] ⏱️ onEndOfTurn forwarded at ${Date.now()}`);
         },
         onTranscript: (transcript) => {
           setCurrentTranscript(transcript);
